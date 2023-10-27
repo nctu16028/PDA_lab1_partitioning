@@ -8,6 +8,8 @@
 #include <vector>
 #include <unordered_map>
 #include <set>
+#include <cstdlib>
+#include <ctime>
 using namespace std;
 
 struct Cell
@@ -44,16 +46,18 @@ public:
     void writeOutput(string ofName);
 
 private:
-    double balanceFactor;
+    float balanceFactor;
     vector<Cell*> cellList;
     vector<Net*> netList;
     unordered_map<string, int> name2Idx;
-
     size_t pMax;
+    float pAvg;
+
     int sizeOfGroup0;
     vector<Cell> bucketOfGroup[2];  // bucket[0/1][idx] is the list of cells whose gain is (idx - pMax)
 
     int initialPartition();
+    void simulatedAnnealing(int& size0);
     void initializeDataStructures();
     void calculateInitialGain(vector<int>& g);
     void copyCircuitState();

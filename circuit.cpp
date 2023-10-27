@@ -39,6 +39,15 @@ void Circuit::readInput(string ifName)
             cellList[cellIdx]->associatedNets.push_back(netIdx);
     }
     fin.close();
+
+    pMax = 0;
+    float pSum = 0.0;
+    for (size_t i = 0; i < cellList.size(); i++)
+    {
+        pMax = max(pMax, cellList[i]->associatedNets.size());
+        pSum += cellList[i]->associatedNets.size();
+    }
+    pAvg = pSum / cellList.size();
 }
 
 
@@ -153,17 +162,81 @@ int Circuit::initialPartition()
         for (auto& netIdx : cellList[i]->associatedNets)
             netList[netIdx]->numCellsInGroup[i % 2]++;
     }
+    simulatedAnnealing(size0);
 
     return size0;
 }
 
 
+void Circuit::simulatedAnnealing(int& size0)
+{
+    srand(time(0));
+    float temperature = pAvg;
+    int numAcceptedUphill;
+    int rejectedCounter = 5;
+    while (rejectedCounter > 0)
+    {
+        int count = cellList.size();
+        numAcceptedUphill = 0;
+        while (count--)
+        {
+            // Choose a cell to move
+            int idx = rand() % cellList.size();
+
+            // Calculate the gain of moving the cell
+            int gain = 0;
+            int from = cellList[idx]->group;
+            int to = 1 - from;
+            for (auto& netIdx : cellList[idx]->associatedNets)
+            {
+                if (netList[netIdx]->numCellsInGroup[from] == 1)
+                    gain++;
+                if (netList[netIdx]->numCellsInGroup[to] == 0)
+                    gain--;
+            }
+
+            // Decide whether the move is adopted
+            if ((from == 0 && !passBalanceCriterion(size0 - 1)) ||
+                (from == 1 && !passBalanceCriterion(size0 + 1)))
+                continue;
+            float delta = -gain;
+            if (delta <= 0)
+            {
+                // Apply the move
+                cellList[idx]->group = to;
+                size0 = (from == 0) ? (size0 - 1) : (size0 + 1);
+                for (auto& netIdx : cellList[idx]->associatedNets)
+                {
+                    netList[netIdx]->numCellsInGroup[from]--;
+                    netList[netIdx]->numCellsInGroup[to]++;
+                }
+            }
+            else
+            {
+                float threshold = exp(- delta / temperature);
+                if ((float)rand() / (RAND_MAX) <= threshold)
+                {
+                    // Apply the move
+                    numAcceptedUphill++;
+                    cellList[idx]->group = to;
+                    size0 = (from == 0) ? (size0 - 1) : (size0 + 1);
+                    for (auto& netIdx : cellList[idx]->associatedNets)
+                    {
+                        netList[netIdx]->numCellsInGroup[from]--;
+                        netList[netIdx]->numCellsInGroup[to]++;
+                    }
+                }
+            }
+        }
+        temperature *= 0.85;
+        if (numAcceptedUphill == 0)
+            rejectedCounter--;
+    }
+}
+
+
 void Circuit::initializeDataStructures()
 {
-    pMax = 0;
-    for (size_t i = 0; i < cellList.size(); i++)
-        pMax = max(pMax, cellList[i]->associatedNets.size());
-
     // Allocate bucket slots
     bucketOfGroup[0].resize(2 * pMax + 1, Cell());
     bucketOfGroup[1].resize(2 * pMax + 1, Cell());
@@ -210,10 +283,8 @@ void Circuit::copyCircuitState()
 
 bool Circuit::passBalanceCriterion(int size0)
 {
-    double lowerbound = (1 - balanceFactor) / 2;
-    double upperbound = (1 + balanceFactor) / 2;
-    double ratio = (double)size0 / (double)cellList.size();
-    return (lowerbound <= ratio && ratio <= upperbound);
+    float lowerbound = float(float(cellList.size() * 0.5) - (int)(balanceFactor * cellList.size() * 0.5));
+    return lowerbound <= (float)size0 && lowerbound <= (float)(cellList.size() - size0);
 }
 
 
