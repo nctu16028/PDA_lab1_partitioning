@@ -16,7 +16,7 @@
 
         make
 
-3. To use the program, enter
+3. To use the program, run
 
         ./Lab1 [path to input file] [path to output file]
 
